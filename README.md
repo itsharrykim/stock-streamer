@@ -1,5 +1,6 @@
-## Stock Streamer
-### End-to-End Stock Stream & Analyzer
+## Stock & Crypto Streamer
+
+### End-to-End Stock & Crypto Stream & Analyzer
 
 How to start the app:
 

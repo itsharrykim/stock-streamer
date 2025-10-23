@@ -1,3 +1,6 @@
+v0.3 
+- App name includes crypto
+
 v0.2
 - Panda library added
 - Demo data (csv) added
