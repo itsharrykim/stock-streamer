@@ -151,6 +151,10 @@ class WebSocketStreamer:
         subscribe_msg = {"action": "subscribe", "trades": list(symbols)}
         self.send_raw(subscribe_msg)
 
+    def unsubscribe_trades(self, symbols: Iterable[str]):
+        unsubscribe_msg = {"action": "unsubscribe", "trades": list(symbols)}
+        self.send_raw(unsubscribe_msg)
+
     def subscribe(self, trades: Optional[Iterable[str]] = None, quotes: Optional[Iterable[str]] = None, bars: Optional[Iterable[str]] = None):
         payload = {"action": "subscribe"}
         if trades:

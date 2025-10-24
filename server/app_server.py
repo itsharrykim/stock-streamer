@@ -4,7 +4,7 @@ import threading
 from queue import Queue
 from typing import Optional, Set
 
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect
+from fastapi import FastAPI, Request, WebSocket, WebSocketDisconnect
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
@@ -40,6 +40,31 @@ def _queue_forwarder(loop: asyncio.AbstractEventLoop):
                 except Exception:
                     print("Removing disconnected client")
                     pass
+
+@app.on_event("startup")
+def startup_event():
+    global streamer, _forwarder_thread
+    loop = asyncio.get_event_loop()
+    # start forwarder thread
+    if _forwarder_thread is None or not _forwarder_thread.is_alive():
+        _forwarder_thread = threading.Thread(target=_queue_forwarder, args=(loop,), daemon=True)
+        _forwarder_thread.start()
+    # start your Alpaca streamer and point it at forward_q
+    streamer = WebSocketStreamer(on_message_cb=None, out_queue=forward_q)
+    streamer.start()
+
+@app.websocket("/ws")
+async def websocket_endpoint(ws: WebSocket):
+    await ws.accept()
+    with clients_lock:
+        clients.add(ws)
+    try:
+        # keep the socket open; clients usually don't send data here
+        while True:
+            await ws.receive_text()
+    except WebSocketDisconnect:
+        with clients_lock:
+            clients.discard(ws)
 
 @app.post("/api/connect")
 async def api_connect():
@@ -78,3 +103,42 @@ async def api_disconnect():
         print("Error stopping streamer")
         return {"ok": False, "stopped": False}
 
+@app.post("/api/subscribe")
+async def api_subscribe(req: Request):
+    global streamer
+    body = await req.json()
+    symbol = (body.get("symbol") or "").strip().upper()
+    
+    if not symbol:
+        return {"ok": False, "error": "missing_symbol"}
+
+    if streamer is None:
+        return {"ok": False, "error": "streamer_not_running"}
+
+    try:
+        streamer.subscribe_trades([symbol])
+    except Exception as e:
+        return {"ok": False, "error": str(e)}
+    print(f"Subscribed to {symbol}")
+    return {"ok": True, "symbol": symbol}
+
+@app.post("/api/unsubscribe")
+async def api_unsubscribe(req: Request):
+    global streamer
+    body = await req.json()
+    symbol = (body.get("symbol") or "").strip().upper()
+
+    if not symbol:
+        return {"ok": False, "error": "missing_symbol"}
+
+    if streamer is None:
+        return {"ok": False, "error": "streamer_not_running"}
+
+    try:
+        streamer.unsubscribe_trades([symbol])
+    except Exception as e:
+        print(e)
+        return {"ok": False, "error": str(e)}
+    
+    print(f"Unsubscribed from {symbol}")
+    return {"ok": True, "symbol": symbol}

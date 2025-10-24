@@ -1,3 +1,6 @@
+v0.5
+- Alpaca stream responses display as text
+
 v0.4
 - Streamlit not ideal for real-time streaming data visualization (continuous app re-run not ideal for high performance)
 - Decoupling server and UI: FastAPI for backend and Lightweight-Charts (HTML + Javascript) for frontend
