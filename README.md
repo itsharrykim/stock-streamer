@@ -8,5 +8,6 @@ How to start the app:
 python -m venv .venv (or use python3)
 .\.venv\Scripts\Activate.ps1
 pip install -r requirements.txt
+cp .env.example .env
 streamlit run app.py
 ```

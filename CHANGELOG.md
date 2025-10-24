@@ -1,5 +1,7 @@
 v0.3 
 - App name includes crypto
+- Alpaca trade api library added
+- Demo websocket streaming from Alpaca added
 
 v0.2
 - Panda library added
