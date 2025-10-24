@@ -1,0 +1,28 @@
+.flash-message-container {
+    /* Basic styling */
+    position: fixed; /* Keep it visible even when scrolling */
+    top: 20px;
+    right: 20px;
+    background-color: #4CAF50; /* Green for success */
+    color: white;
+    padding: 15px;
+    border-radius: 5px;
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+    z-index: 1000; /* Ensure it's on top of other elements */
+    opacity: 1;
+
+    /* Animation initial state */
+    transition: opacity 0.5s, transform 0.5s;
+    transform: translateX(0); /* Default position */
+}
+
+/* Hidden state */
+.flash-message-container.hidden {
+    opacity: 0;
+    transform: translateX(100%); /* Start off-screen to the right */
+}
+
+/* Optional: Different style for error messages */
+.flash-message-container.error {
+    background-color: #f44336; /* Red for error */
+}

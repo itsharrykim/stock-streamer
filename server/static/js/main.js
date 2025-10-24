@@ -7,6 +7,8 @@ const streamerStatus = document.getElementById('status-stream')
 const symbolInput = document.getElementById('input-symbol')
 const symbolStatus = document.getElementById('status-symbol')
 const streamMessagesContainer = document.getElementById('stream-messages-container')
+const flashMessageContainer = document.getElementById('flash-message-container')
+const flashMessage = document.getElementById('flash-message')
 
 // initial state
 let connectionStatus = false
@@ -123,20 +125,20 @@ connectBtn.addEventListener('click', async function () {
 
         const body = await resp.json()
         if (body && body.running && body.started === false) {
-            alert('Streamer is already connected.')
+            showFlashMessage('Streamer is already connected.')
             connectionStatus = true
             streamerStatus.textContent = 'Stream: Connected'
         } else if (body && body.running && body.started) {
-            alert('Streamer started successfully.')
+            showFlashMessage('Streamer started successfully.')
             connectionStatus = true
             streamerStatus.textContent = 'Stream: Connected'
             symbolStatus.textContent = 'Symbol: N/A'
         } else {
-            alert("Unexpected response: " + JSON.stringify(body))
+            showFlashMessage("Unexpected response: " + JSON.stringify(body), 'error')
         }
     } catch (err) {
         console.error('Failed to connect streamer:', err)
-        alert('Failed to start streamer. Check server logs.') 
+        showFlashMessage('Failed to connect streamer. Check server logs.', 'error')
     }
 })
 
@@ -146,22 +148,22 @@ disconnectBtn.addEventListener('click', async function () {
         // http request failed
         if (!resp.ok) {
             const text = await resp.text().catch(() => resp.statusText)
-            alert(`Request failed: ${resp.status} ${resp.statusText}`)
+            showFlashMessage(`Request failed: ${resp.status} ${text}`, 'error')
             return
         }
 
         const body = await resp.json()
         if (body && body.ok && body.stopped) {
-            alert('Streamer disconnected successfully.')
+            showFlashMessage('Streamer disconnected successfully.')
             connectionStatus = false
             streamerStatus.textContent = 'Stream: Disconnected'
             symbolStatus.textContent = 'Symbol: N/A'
         } else {
-            alert("Unexpected response: " + JSON.stringify(body))
+            showFlashMessage("Unexpected response: " + JSON.stringify(body), 'error')
         }
     } catch (err) {
         console.error('Failed to disconnect streamer:', err)
-        alert('Failed to disconnect streamer. Check server logs.')  
+        showFlashMessage('Failed to disconnect streamer. Check server logs.', 'error')
     }
 })
 
@@ -171,7 +173,7 @@ startBtn.addEventListener("click", async () => {
         const symbol = symbolInput.value.trim().toUpperCase()
 
         if (!symbol) {
-            alert("Please enter a symbol.")
+            showFlashMessage("Please enter a symbol.")
             return
         }
 
@@ -184,28 +186,28 @@ startBtn.addEventListener("click", async () => {
             })
             if (!resp.ok) {
                 const txt = await resp.text().catch(() => resp.statusText)
-                alert("Subscribe failed: " + resp.status + " " + txt)
+                showFlashMessage("Subscribe failed: " + resp.status + " " + txt, 'error')
                 return
             }
             const body = await resp.json()
             if (body && body.ok && body.symbol === symbol) {
                 symbolStatus.textContent = `Symbol: ${body.symbol}`
                 symbolInput.disabled = true
-                alert("Subscribed: " + body.symbol)
+                showFlashMessage("Subscribed: " + body.symbol)
             } else if (body && body.ok && body.symbol !== symbol) {
                 symbolStatus.textContent = `Symbol: ${body.symbol}`
                 symbolInput.disabled = true
-                alert("Subscribe response: " + JSON.stringify(body))
+                showFlashMessage("Subscribe response: " + JSON.stringify(body))
             } else {
                 symbolStatus.textContent = `Symbol: N/A`
-                alert("Subscribe failed: " + JSON.stringify(body))
+                showFlashMessage("Subscribe failed: " + JSON.stringify(body), 'error')
             }
         } catch (err) {
             console.error("subscribe error", err)
-            alert("Subscribe failed check server logs")
+            showFlashMessage("Subscribe failed check server logs", 'error')
         }
     } else {
-        alert("Please connect the streamer first.")
+        showFlashMessage("Please connect the streamer first.", 'error')
     }
 })
 
@@ -213,7 +215,7 @@ stopBtn.addEventListener("click", async () => {
     const symbol = symbolInput.value.trim().toUpperCase()
 
     if (!symbol) {
-        alert("Please enter a symbol.")
+        showFlashMessage("Please enter a symbol.")
         return
     }
 
@@ -224,7 +226,7 @@ stopBtn.addEventListener("click", async () => {
             body: JSON.stringify({ symbol: symbol }),
         })
         if (!resp.ok) {
-            alert("Unsubscribe failed: " + resp.statusText)
+            showFlashMessage("Unsubscribe failed: " + resp.statusText, 'error')
             return
         }
         const body = await resp.json()
@@ -233,14 +235,38 @@ stopBtn.addEventListener("click", async () => {
             symbolStatus.textContent = `Symbol: N/A`
             streamMessagesContainer.innerHTML = ""
             symbolInput.disabled = false
-            alert("Unsubscribed successfully.")
+            showFlashMessage("Unsubscribed successfully.")
         } else if (body && body.error) {
-            alert("Unsubscribe failed: " + body.error)
+            showFlashMessage("Unsubscribe failed: " + body.error, 'error')
         } else {
-            alert("Unsubscribe failed: " + JSON.stringify(body))
+            showFlashMessage("Unsubscribe failed: " + JSON.stringify(body), 'error')
         }
     } catch (err) {
         console.error("unsubscribe error", err)
-        alert("Unsubscribe failed check server logs")
+        showFlashMessage("Unsubscribe failed check server logs", 'error')
     }
 })
+
+function showFlashMessage(message, type = 'success') {
+    const duration = 3000; // 3 seconds
+
+    // 1. Set content and type
+    flashMessage.textContent = message;
+    flashMessage.className = 'flash-message'; // Reset classes
+    if (type === 'error') {
+        flashMessageContainer.classList.add('error');
+    }
+
+    // 2. SHOW the message by removing the 'hidden' class
+    // We use a slight delay with setTimeout to ensure the browser registers the class removal
+    // for the CSS transition to work smoothly (though for simple visibility toggle, removing the class usually suffices).
+    setTimeout(() => {
+        flashMessageContainer.classList.remove('hidden');
+    }, 50);
+
+
+    // 3. HIDE the message after the duration
+    setTimeout(() => {
+        flashMessageContainer.classList.add('hidden');
+    }, duration);
+}

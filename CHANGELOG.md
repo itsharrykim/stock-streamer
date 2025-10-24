@@ -1,3 +1,6 @@
+v0.8
+- Replace all javascript alert dialog to HTML/CSS/JS flash message
+
 v0.7
 - Symbol textbox added
 - Alpaca websocket url changed from test to IEX
