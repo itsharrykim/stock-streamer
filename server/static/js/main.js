@@ -28,18 +28,43 @@ let chart = null
 let lineSeries = null
 const chartDiv = document.getElementById('chart')
 if (chartDiv && window.LightweightCharts) {
+
     chart = LightweightCharts.createChart(chartDiv, {
         layout: { background: { color: '#ffffff' }, textColor: '#000' },
         rightPriceScale: { visible: true },
         timeScale: { timeVisible: true, secondsVisible: true },
     })
-    lineSeries = chart.addSeries(LightweightCharts.LineSeries, { 
-    color: '#2b8cff', 
-    lineWidth: 2 
-})
+    // lineSeries = chart.addSeries(LightweightCharts.LineSeries, { 
+    //     color: '#2b8cff', 
+    //     lineWidth: 2 
+    // })
+
 } else {
     console.warn('Chart container or LightweightCharts missing')
 }
+
+
+    // main tick series (line of last price)
+    const priceSeries = chart.addSeries(LightweightCharts.LineSeries, { color: '#2b8cff', lineWidth: 2})
+
+    // metric overlay series: VWAP (orange), SMA (green), EMA (purple)
+    const vwapSeries = chart.addSeries(LightweightCharts.LineSeries, { color: '#ff7f0e', lineWidth: 1 })
+    const smaSeries  = chart.addSeries(LightweightCharts.LineSeries, { color: '#2ca02c', lineWidth: 1 })
+    const emaSeries  = chart.addSeries(LightweightCharts.LineSeries, { color: '#9467bd', lineWidth: 1 })
+
+    // small in-memory buffers to avoid sending huge setData frequently
+    const MAX_POINTS = 1000
+    const priceBuffer = []
+
+    function pushPricePoint(timeSec, value) {
+        priceBuffer.push({ time: timeSec, value })
+        if (priceBuffer.length > MAX_POINTS) priceBuffer.shift()
+        priceSeries.update({ time: timeSec, value })
+    }
+
+    // track last metric point time per symbol to avoid overlapping identical timestamps
+    const lastMetricTime = {}
+
 
 function parseTimestampMs(item) {
     if (!item) return null
@@ -69,17 +94,41 @@ forwardWs.addEventListener("message", (evt) => {
     try {
         const item = JSON.parse(evt.data)
 
+        // If analyzer forwarded a metrics message, update overlay series
+        if (item.type === 'metrics' && item.symbol) {
+            const nowSec = Math.round((Date.now()) / 1000)
+            const sym = item.symbol
+            // use now as time for metrics (backend throttles frequency)
+            if (item.vwap !== null && item.vwap !== undefined) {
+                vwapSeries.update({ time: nowSec, value: Number(item.vwap) })
+            }
+            if (item.sma !== null && item.sma !== undefined) {
+                smaSeries.update({ time: nowSec, value: Number(item.sma) })
+            }
+            if (item.ema20 !== null && item.ema20 !== undefined) {
+                emaSeries.update({ time: nowSec, value: Number(item.ema20) })
+            }
+            // update symbol label
+            if (symbolStatus) symbolStatus.textContent = `Symbol: ${sym}`
+            return
+        }
+
+        // If backend sent a finished bar, update priceSeries with close
+        if (item.type === 'bar' && item.close !== undefined && item.time !== undefined) {
+            // backend bar.time is seconds
+            const timeSec = Number(item.time)
+            pushPricePoint(timeSec, Number(item.close))
+            return
+        }
+
         // Try to extract price and timestamp; adapt to your Alpaca message shape
         const price = item.p ?? item.price ?? item.last ?? item.px
         const tsMs = parseTimestampMs(item)
 
-        if (price !== undefined && tsMs !== null && lineSeries) {
-            // Lightweight-Charts expects time as unix seconds (integer) or ISO string
-            const time = Math.round(tsMs / 1000)
-            lineSeries.update({ time: time, value: Number(price) })
-        } else {
-            // If no chart, optionally log raw message to console
-            console.debug('Forwarded item (no chart):', item)
+        if (price !== undefined && tsMs !== null) {
+            const timeSec = Math.round(tsMs / 1000)
+            pushPricePoint(timeSec, Number(price))
+            return
         }
 
         if (streamMessagesContainer) {

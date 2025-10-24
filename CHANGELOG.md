@@ -1,3 +1,8 @@
+v0.9
+- demo data removed
+- Stock data analyzer added
+- VWAP/SMA/EMA metrics added to chart
+
 v0.8
 - Replace all javascript alert dialog to HTML/CSS/JS flash message
 

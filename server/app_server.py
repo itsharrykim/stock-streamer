@@ -1,14 +1,17 @@
 import asyncio
+import datetime
 import json
 import threading
+import time
 from queue import Queue
-from typing import Optional, Set
+from typing import Dict, Optional, Set
 
 from fastapi import FastAPI, Request, WebSocket, WebSocketDisconnect
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
 from services.websocket_alpaca import WebSocketStreamer
+from services.analyzer import Analyzer
 
 #globals
 streamer: Optional[WebSocketStreamer] = None
@@ -19,12 +22,38 @@ forward_q: Queue = Queue()
 clients: Set[WebSocket] = set()
 clients_lock = threading.Lock()
 
+# analyzer instance
+analyzer = Analyzer(default_window_seconds=60)
+
+# simple throttling state: send metrics no more often than metrics_interval_ms per symbol
+_last_metrics_sent: Dict[str, float] = {}
+_metrics_interval_ms = 1000
+
 app = FastAPI()
 app.mount("/static", StaticFiles(directory="server/static", html=True), name="static")
 
 @app.get("/", response_class=FileResponse)
 async def root_index():
     return FileResponse("server/static/index.html")
+
+def _iso_to_ms(s: str) -> Optional[int]:
+    if s is None:
+        return None
+    try:
+        # try epoch in seconds or milliseconds
+        num = float(s)
+        if num > 1e12:  # already ms
+            return int(num)
+        if num > 1e9:  # seconds
+            return int(num * 1000)
+    except Exception:
+        pass
+    try:
+        # parse ISO string
+        dt = datetime.datetime.fromisoformat(s.replace("Z", "+00:00"))
+        return int(dt.timestamp() * 1000)
+    except Exception:
+        return None
 
 def _queue_forwarder(loop: asyncio.AbstractEventLoop):
     while True:
@@ -33,13 +62,75 @@ def _queue_forwarder(loop: asyncio.AbstractEventLoop):
             text = json.dumps(item, default=str)
         except Exception:
             text = json.dumps({"_serialize_error": True, "raw": str(item)})
+
+        # First: forward raw item to clients (tick/control)
         with clients_lock:
             for ws in list(clients):
                 try:
                     asyncio.run_coroutine_threadsafe(ws.send_text(text), loop)
                 except Exception:
-                    print("Removing disconnected client")
                     pass
+                
+        # Try to extract tick fields for analysis
+        try:
+            symbol = item.get("S")
+            price = item.get("p")
+            # optional size/volume
+            size = item.get("s")
+            ts_raw = item.get("t")
+            ts_ms = None
+            if isinstance(ts_raw, (int, float)):
+                ts_ms = int(float(ts_raw) * (1000 if ts_raw < 1e12 else 1))
+            elif isinstance(ts_raw, str):
+                ts_ms = _iso_to_ms(ts_raw)
+            # fallback to now
+            if ts_ms is None:
+                ts_ms = int(time.time() * 1000)
+            if symbol and price is not None:
+                # normalize
+                symbol = str(symbol).upper()
+                price = float(price)
+                size = float(size) if size is not None else 1.0
+
+                # feed analyzer (returns finished bars if any)
+                finished_bars = analyzer.add_tick(symbol, ts_ms, price, size)
+
+                # send finished bars to clients
+                if finished_bars:
+                    for fb in finished_bars:
+                        try:
+                            asyncio.run_coroutine_threadsafe(
+                                ws.send_text(json.dumps(fb, default=str)), loop
+                            )
+                        except Exception:
+                            pass
+
+                # throttle metrics per symbol
+                now_ms = int(time.time() * 1000)
+                last = _last_metrics_sent.get(symbol, 0)
+                if now_ms - last >= _metrics_interval_ms:
+                    _last_metrics_sent[symbol] = now_ms
+                    metrics = {
+                        "type": "metrics",
+                        "symbol": symbol,
+                        "window_s": analyzer.default_window_seconds,
+                        "vwap": analyzer.vwap(symbol),
+                        "sma": analyzer.sma(symbol),
+                        "ema20": analyzer.ema(symbol, span=20),
+                        "std": analyzer.std(symbol),
+                        # do not call heavy ops too frequently
+                    }
+                    metrics_text = json.dumps(metrics, default=str)
+                    with clients_lock:
+                        for ws in list(clients):
+                            try:
+                                asyncio.run_coroutine_threadsafe(ws.send_text(metrics_text), loop)
+                            except Exception:
+                                pass
+        except Exception:
+            # swallow per-item errors, optionally log
+            import traceback
+            traceback.print_exc()
 
 @app.on_event("startup")
 def startup_event():
