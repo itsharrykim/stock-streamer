@@ -1,3 +1,8 @@
+v0.4
+- Streamlit not ideal for real-time streaming data visualization (continuous app re-run not ideal for high performance)
+- Decoupling server and UI: FastAPI for backend and Lightweight-Charts (HTML + Javascript) for frontend
+- Simple connect / disconnect websocket to Alpaca using FastAPI and vanilla HTML + Javascript
+
 v0.3 
 - App name includes crypto
 - Alpaca trade api library added

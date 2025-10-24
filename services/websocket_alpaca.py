@@ -54,7 +54,7 @@ class WebSocketStreamer:
     def _on_open(self, ws):
         auth_msg = {"action": "auth", "key": ALPACA_KEY, "secret": ALPACA_SECRET}
         try:
-            print(auth_msg)
+            # print(auth_msg)
             ws.send(json.dumps(auth_msg))
         except Exception as e:
             self._handle_item({"_ws_error": True, "error": f"Auth send failed: {e}"})
