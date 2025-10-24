@@ -13,7 +13,7 @@ load_dotenv(env_path)
 
 ALPACA_KEY = os.getenv("ALPACA_API_KEY")
 ALPACA_SECRET = os.getenv("ALPACA_API_SECRET")
-ALPACA_URL = "wss://stream.data.alpaca.markets/v2/test"
+ALPACA_URL = "wss://stream.data.alpaca.markets/v2/iex"
 
 
 class WebSocketStreamer:

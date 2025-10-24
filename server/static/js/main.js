@@ -1,12 +1,19 @@
-let connectionStatus = false
 
 const connectBtn = document.getElementById('btn-connect-stream')
 const disconnectBtn = document.getElementById('btn-disconnect-stream')
 const startBtn = document.getElementById('btn-start-stream')
 const stopBtn = document.getElementById('btn-stop-stream')
 const streamerStatus = document.getElementById('status-stream')
+const symbolInput = document.getElementById('input-symbol')
 const symbolStatus = document.getElementById('status-symbol')
 const streamMessagesContainer = document.getElementById('stream-messages-container')
+
+// initial state
+let connectionStatus = false
+
+// empty and enable empty symbol textbox when first loaded
+symbolInput.value = ""
+symbolInput.disabled = false
 
 // open forward socket to receive stream messages
 const wsProto = location.protocol === "https:" ? "wss" : "ws"
@@ -161,8 +168,13 @@ disconnectBtn.addEventListener('click', async function () {
 startBtn.addEventListener("click", async () => {
     // make sure connection is established
     if (connectionStatus) {
-        const symbol = "FAKEPACA"
-        
+        const symbol = symbolInput.value.trim().toUpperCase()
+
+        if (!symbol) {
+            alert("Please enter a symbol.")
+            return
+        }
+
         try {
             // Ask server to subscribe
             const resp = await fetch("/api/subscribe", {
@@ -178,9 +190,11 @@ startBtn.addEventListener("click", async () => {
             const body = await resp.json()
             if (body && body.ok && body.symbol === symbol) {
                 symbolStatus.textContent = `Symbol: ${body.symbol}`
+                symbolInput.disabled = true
                 alert("Subscribed: " + body.symbol)
             } else if (body && body.ok && body.symbol !== symbol) {
                 symbolStatus.textContent = `Symbol: ${body.symbol}`
+                symbolInput.disabled = true
                 alert("Subscribe response: " + JSON.stringify(body))
             } else {
                 symbolStatus.textContent = `Symbol: N/A`
@@ -196,7 +210,13 @@ startBtn.addEventListener("click", async () => {
 })
 
 stopBtn.addEventListener("click", async () => {
-    symbol = "FAKEPACA"
+    const symbol = symbolInput.value.trim().toUpperCase()
+
+    if (!symbol) {
+        alert("Please enter a symbol.")
+        return
+    }
+
     try {
         const resp = await fetch("/api/unsubscribe", {
             method: "POST",
@@ -212,6 +232,7 @@ stopBtn.addEventListener("click", async () => {
         if (body && body.ok) {
             symbolStatus.textContent = `Symbol: N/A`
             streamMessagesContainer.innerHTML = ""
+            symbolInput.disabled = false
             alert("Unsubscribed successfully.")
         } else if (body && body.error) {
             alert("Unsubscribe failed: " + body.error)

@@ -1,5 +1,9 @@
+v0.7
+- Symbol textbox added
+- Alpaca websocket url changed from test to IEX
+
 v0.6
-- display real-time line chart
+- Display real-time line chart
 
 v0.5
 - Alpaca stream responses display as text
