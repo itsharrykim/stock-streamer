@@ -1,3 +1,6 @@
+v0.6
+- display real-time line chart
+
 v0.5
 - Alpaca stream responses display as text
 

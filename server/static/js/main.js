@@ -13,6 +13,45 @@ const wsProto = location.protocol === "https:" ? "wss" : "ws"
 const wsUrl = wsProto + "://" + location.host + "/ws"
 const forwardWs = new WebSocket(wsUrl)
 
+
+// initialize chart (guard missing container)
+let chart = null
+let lineSeries = null
+const chartDiv = document.getElementById('chart')
+if (chartDiv && window.LightweightCharts) {
+    chart = LightweightCharts.createChart(chartDiv, {
+        layout: { background: { color: '#ffffff' }, textColor: '#000' },
+        rightPriceScale: { visible: true },
+        timeScale: { timeVisible: true, secondsVisible: true },
+    })
+    lineSeries = chart.addSeries(LightweightCharts.LineSeries, { 
+    color: '#2b8cff', 
+    lineWidth: 2 
+})
+} else {
+    console.warn('Chart container or LightweightCharts missing')
+}
+
+function parseTimestampMs(item) {
+    if (!item) return null
+    if (item.t) {
+        const parsed = Date.parse(item.t)
+        if (!isNaN(parsed)) return parsed
+        const num = Number(item.t)
+        if (!isNaN(num)) return (String(item.t).length === 10) ? num * 1000 : num
+    }
+    if (item.timestamp) {
+        const parsed = Date.parse(item.timestamp)
+        if (!isNaN(parsed)) return parsed
+    }
+    if (item.ts) {
+        const num = Number(item.ts)
+        if (!isNaN(num)) return (String(item.ts).length === 10) ? num * 1000 : num
+    }
+    if (item._epoch_ms) return Number(item._epoch_ms)
+    return null
+}
+
 forwardWs.addEventListener("open", () => {
     console.log("Forward socket open", wsUrl)
 })
@@ -20,21 +59,24 @@ forwardWs.addEventListener("open", () => {
 forwardWs.addEventListener("message", (evt) => {
     try {
         const item = JSON.parse(evt.data)
-        // try to show a compact line: timestamp | symbol | price
-        const timestamp = item.t
-        const symbol = item.s
-        const price = item.p
-        let line = JSON.stringify(item)
-        
-        if (timestamp || symbol || price) {
-            const when = timestamp ? new Date(timestamp).toLocaleString() : ""
-            line = `${when} | ${symbol} | ${price}`
+
+        // Try to extract price and timestamp; adapt to your Alpaca message shape
+        const price = item.p ?? item.price ?? item.last ?? item.px
+        const tsMs = parseTimestampMs(item)
+
+        if (price !== undefined && tsMs !== null && lineSeries) {
+            // Lightweight-Charts expects time as unix seconds (integer) or ISO string
+            const time = Math.round(tsMs / 1000)
+            lineSeries.update({ time: time, value: Number(price) })
+        } else {
+            // If no chart, optionally log raw message to console
+            console.debug('Forwarded item (no chart):', item)
         }
 
         if (streamMessagesContainer) {
             // create a new div for each message row
             const node = document.createElement("div")
-            node.textContent = line
+            node.textContent = messageParser(item)
             streamMessagesContainer.appendChild(node)
             // keep the most recent ~100 lines
             while (streamMessagesContainer.childNodes.length > 100) streamMessagesContainer.removeChild(streamMessagesContainer.firstChild)
@@ -44,13 +86,22 @@ forwardWs.addEventListener("message", (evt) => {
     }
 })
 
+function messageParser(msg) {
+    // msg is JSON
+    const type = msg.T
+    const timestamp = msg.t
+    const symbol = msg.s
+    const price = msg.p
+
+    if (type === "t") {
+        const line = (timestamp ? new Date(timestamp).toLocaleString() : "") + " | " + symbol + " | " + price
+        return line 
+    }
+}
+
 forwardWs.addEventListener("close", () => {
     console.log("Forward socket closed")
 })
-
-
-
-
 
 connectBtn.addEventListener('click', async function () {
     try {
@@ -160,6 +211,7 @@ stopBtn.addEventListener("click", async () => {
         
         if (body && body.ok) {
             symbolStatus.textContent = `Symbol: N/A`
+            streamMessagesContainer.innerHTML = ""
             alert("Unsubscribed successfully.")
         } else if (body && body.error) {
             alert("Unsubscribe failed: " + body.error)
